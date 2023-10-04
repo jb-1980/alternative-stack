@@ -1,52 +1,79 @@
-import type { User, Note } from "@prisma/client";
+// import type { User, Note } from "@prisma/client";
 
-import { prisma } from "~/db.server";
+import type { WithId } from "mongodb";
+import { ObjectId } from "mongodb";
+import { Collection } from "~/db.server";
 
-export function getNote({
-  id,
+// import { prisma } from "~/db.server";
+
+type NoteDocument = {
+  title: string;
+  body: string;
+
+  createdAt?: Date;
+  updatedAt?: Date;
+  userId: ObjectId;
+};
+
+const Notes = new Collection<NoteDocument>("notes");
+
+type SerializedNote = Omit<NoteDocument, "userId"> & {
+  id: string;
+  userId: string;
+};
+
+const serializeNote = (
+  note: WithId<
+    NoteDocument & {
+      createdAt: Date;
+      updatedAt: Date;
+    }
+  > | null,
+): SerializedNote | null => {
+  if (!note) {
+    return null;
+  }
+
+  const { _id, userId, ...noteWithoutUserId } = note;
+  return {
+    id: _id.toString(),
+    userId: userId.toString(),
+    ...noteWithoutUserId,
+  };
+};
+
+export async function getNote(
+  id: string | ObjectId,
+): Promise<SerializedNote | null> {
+  return serializeNote(await Notes.findOne({ _id: new ObjectId(id) }));
+}
+
+export async function getNoteListItems({
   userId,
-}: Pick<Note, "id"> & {
-  userId: User["id"];
-}) {
-  return prisma.note.findFirst({
-    select: { id: true, body: true, title: true },
-    where: { id, userId },
-  });
+}: {
+  userId: string | ObjectId;
+}): Promise<SerializedNote[]> {
+  const notes = await (
+    await Notes.find({ userId: new ObjectId(userId) })
+  ).toArray();
+  return notes.map(serializeNote) as SerializedNote[];
 }
 
-export function getNoteListItems({ userId }: { userId: User["id"] }) {
-  return prisma.note.findMany({
-    where: { userId },
-    select: { id: true, title: true },
-    orderBy: { updatedAt: "desc" },
-  });
-}
-
-export function createNote({
+export async function createNote({
   body,
   title,
   userId,
-}: Pick<Note, "body" | "title"> & {
-  userId: User["id"];
-}) {
-  return prisma.note.create({
-    data: {
-      title,
-      body,
-      user: {
-        connect: {
-          id: userId,
-        },
-      },
-    },
+}: Pick<NoteDocument, "body" | "title"> & {
+  userId: string | ObjectId;
+}): Promise<string> {
+  const { insertedId } = await Notes.insertOne({
+    body,
+    title,
+    userId: new ObjectId(userId),
   });
+  return insertedId.toString();
 }
 
-export function deleteNote({
-  id,
-  userId,
-}: Pick<Note, "id"> & { userId: User["id"] }) {
-  return prisma.note.deleteMany({
-    where: { id, userId },
-  });
+export async function deleteNote(id: ObjectId | string): Promise<void> {
+  await Notes.collection.deleteOne({ _id: new ObjectId(id) });
 }

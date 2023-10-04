@@ -57,13 +57,13 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     );
   }
 
-  const user = await createUser(email, password);
+  const userId = await createUser(email, password);
 
   return createUserSession({
     redirectTo,
     remember: false,
     request,
-    userId: user.id,
+    userId: userId,
   });
 };
 
