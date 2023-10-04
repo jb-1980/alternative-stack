@@ -12,11 +12,11 @@ import { deleteNote, getNote } from "~/models/note.server";
 import { requireUserId } from "~/session.server";
 
 export const loader = async ({ params, request }: LoaderFunctionArgs) => {
-  await requireUserId(request);
+  const userId = await requireUserId(request);
   invariant(params.noteId, "noteId not found");
 
   const note = await getNote(params.noteId);
-  if (!note) {
+  if (!note || note.userId !== userId) {
     throw new Response("Not Found", { status: 404 });
   }
   return json({ note });
